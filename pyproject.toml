@@ -40,7 +40,7 @@ dev = [
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
-commit_parser = "conventional"
+commit_parser = "angular"
 changelog_file = "CHANGELOG.md"
 build_command = "uv build"
 allow_zero_version = true
