@@ -2,6 +2,13 @@
 
 
 
+## v0.1.2 (2026-08-22)
+
+### Fix
+
+* fix(release): pass pypi token to uv publish ([`894aac2`](https://github.com/mr-jones123/toji/commit/894aac2ea83946b5f22ccf62e0ab4b3660aa0e59))
+
+
 ## v0.1.1 (2026-08-22)
 
 ### Fix
