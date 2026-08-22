@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write        # semantic-release: version commit + tag + GitHub release
+  id-token: write        # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # full history: PSR needs tags to compute the next version
+          token: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: uv sync --dev
+
+      - name: Test
+        run: uv run pytest -q
+
+      - name: Semantic release
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+          # PyPI: either trusted publishing (id-token, no secret needed) or a token
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          uv run semantic-release version --skip-if-no-change
+          if git describe --tags --exact-match HEAD 2>/dev/null; then
+            uv build
+            uv publish              # uses TWINE_* if set, else OIDC trusted publishing
+          fi
+
+      - name: Upload dist artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14

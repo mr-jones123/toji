@@ -1,0 +1,14 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+
+# toji's own index
+.toji/
