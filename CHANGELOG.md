@@ -2,6 +2,17 @@
 
 
 
+## v0.1.1 (2026-08-22)
+
+### Fix
+
+* fix(release): enable pypi publishing ([`943119b`](https://github.com/mr-jones123/toji/commit/943119bf4705226ef8d9f846611a0807b779ab5b))
+
+### Unknown
+
+* Update README.md ([`bf76e79`](https://github.com/mr-jones123/toji/commit/bf76e7942080e1b92a881acc64e282af017e5704))
+
+
 ## v0.1.0 (2026-08-22)
 
 ### Chore
