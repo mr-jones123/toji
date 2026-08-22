@@ -2,6 +2,13 @@
 
 
 
+## v0.1.3 (2026-08-22)
+
+### Fix
+
+* fix(release): keep __version__ in sync with pyproject version ([`322197e`](https://github.com/mr-jones123/toji/commit/322197e33b1a13e303c8667843d24838d05d0a37))
+
+
 ## v0.1.2 (2026-08-22)
 
 ### Fix
