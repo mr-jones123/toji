@@ -33,16 +33,15 @@ jobs:
       - name: Semantic release
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           uv run semantic-release version
           if git describe --tags --exact-match HEAD 2>/dev/null; then
             uv build
-            if [ -n "$TWINE_PASSWORD" ]; then
-              uv publish
+            if [ -n "$PYPI_TOKEN" ]; then
+              uv publish --token "$PYPI_TOKEN"
             else
-              echo "PYI_TOKEN/PYPI_TOKEN not set - skipping PyPI publish"
+              echo "PYPI_TOKEN not set - skipping PyPI publish"
             fi
           else
             echo "No version change - skipping build/publish"
