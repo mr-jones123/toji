@@ -1,6 +1,6 @@
 [project]
 name = "toji"
-description = "Codebase graph memory: index structure, answer with evidence"
+readme = "README.md"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
