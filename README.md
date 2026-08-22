@@ -9,7 +9,7 @@
 
 toji parses your codebase (Python, TypeScript, TSX, JavaScript) into a queryable
 graph — symbols, signatures, docstrings, call/import/inherit edges — stored in
-SQLite. No source is stored; `read` always fetches live lines from disk.
+SQLite. No source is stored; `read` always fetches live lines from disk. Awesome no?
 
 Built for AI reviewers and anyone tired of skimming ten files to answer
 "who calls this?": every answer carries exact `path:line` evidence, ambiguous
