@@ -39,6 +39,7 @@ dev = [
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/toji/__init__.py:__version__"]
 tag_format = "v{version}"
 commit_parser = "angular"
 changelog_file = "CHANGELOG.md"
