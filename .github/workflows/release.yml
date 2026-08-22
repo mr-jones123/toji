@@ -30,18 +30,22 @@ jobs:
 
       - name: Test
         run: uv run pytest -q
-
       - name: Semantic release
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-          # PyPI: either trusted publishing (id-token, no secret needed) or a token
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          uv run semantic-release version --skip-if-no-change
+          uv run semantic-release version
           if git describe --tags --exact-match HEAD 2>/dev/null; then
             uv build
-            uv publish              # uses TWINE_* if set, else OIDC trusted publishing
+            if [ -n "$TWINE_PASSWORD" ]; then
+              uv publish
+            else
+              echo "PYI_TOKEN/PYPI_TOKEN not set - skipping PyPI publish"
+            fi
+          else
+            echo "No version change - skipping build/publish"
           fi
 
       - name: Upload dist artifacts
