@@ -2,6 +2,17 @@
 
 
 
+## v0.2.0 (2026-08-31)
+
+### Feature
+
+* feat: add benchmark adapters and receiver-aware TS/JS resolution
+
+- &#39;toji benchmark graphcode&#39; and &#39;toji benchmark traceeval&#39; run GraphCode-Bench and TraceEval locally, scoring caller/callee and edge precision/recall/F1 with official normalization.
+- TS/JS extraction qualifies constructor assignments, constructed class fields, and this.method() calls to their class before resolution.
+- Docs (README, SKILL) and tests cover both. ([`e50c0ae`](https://github.com/mr-jones123/toji/commit/e50c0aef3ea4a53bba30e97dd72aa08047b1c7ce))
+
+
 ## v0.1.3 (2026-08-22)
 
 ### Fix
