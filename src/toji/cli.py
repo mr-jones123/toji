@@ -19,6 +19,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from . import __version__
+from .benchmark import run_graphcode, run_traceeval
 from .graph import Graph
 from .indexer import index as run_index
 from .store import Store
@@ -341,6 +342,41 @@ def cmd_stats(args, store: Store, graph: Graph) -> None:
         t.add_row(f"  {kind}", str(n))
     console.print(t)
 
+def cmd_benchmark(args) -> None:
+    if args.suite == "graphcode":
+        report = run_graphcode(Path(args.dataset), Path(args.repos), limit=args.limit)
+        if args.output:
+            Path(args.output).write_text(json.dumps(report, indent=2) + "\n")
+    else:
+        report = run_traceeval(
+            Path(args.corpus),
+            ids=Path(args.ids) if args.ids else None,
+            languages=tuple(args.languages),
+            limit=args.limit,
+            workers=args.workers,
+            output_dir=Path(args.output_dir) if args.output_dir else None,
+        )
+
+    if args.json:
+        _json(report)
+        return
+    metrics = report["metrics"]
+    console.print(f"[bold]{report['benchmark']}[/]: {report['scored']} scored")
+    console.print(
+        f"precision {metrics['precision']:.3f}  recall {metrics['recall']:.3f}  F1 {metrics['f1']:.3f}"
+    )
+    if args.suite == "graphcode":
+        console.print(
+            f"macro F1 {metrics['macro_f1']:.3f}  exact match {metrics['exact_match']:.3f}  "
+            f"skipped {len(report['skipped'])}"
+        )
+    else:
+        for language, summary in report["by_language"].items():
+            console.print(f"  {language}: {summary['scored']} programs, F1 {summary['f1']:.3f}")
+        for output in report["output_files"]:
+            console.print(f"  wrote {output}")
+
+
 
 # ---------------------------------------------------------------------------
 # entry
@@ -400,6 +436,27 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("stats", parents=[common], help="index statistics")
     s.set_defaults(func=cmd_stats)
 
+    bench = sub.add_parser("benchmark", help="run graph correctness benchmarks")
+    suites = bench.add_subparsers(dest="suite", required=True)
+
+    gc = suites.add_parser("graphcode", help="run GraphCode-Bench JSONL")
+    gc.add_argument("dataset", help="path to bench100.jsonl or bench500_balanced.jsonl")
+    gc.add_argument("repos", help="directory containing benchmark repository checkouts")
+    gc.add_argument("--limit", type=int)
+    gc.add_argument("--output", help="write the complete JSON report")
+    gc.add_argument("--json", action="store_true", help="emit JSON instead of text")
+    gc.set_defaults(func=cmd_benchmark)
+
+    te = suites.add_parser("traceeval", help="run TraceEval Python/JavaScript corpus")
+    te.add_argument("corpus", help="directory containing language/program/callgraph.json")
+    te.add_argument("--ids", help="optional TraceEval train_ids.json or test_ids.json")
+    te.add_argument("--languages", nargs="+", choices=("python", "javascript"), default=("python", "javascript"))
+    te.add_argument("--limit", type=int)
+    te.add_argument("--workers", type=int, default=4)
+    te.add_argument("--output-dir", help="write files compatible with TraceEval compute_metrics.py")
+    te.add_argument("--json", action="store_true", help="emit JSON instead of text")
+    te.set_defaults(func=cmd_benchmark)
+
     return p
 
 
@@ -408,8 +465,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     store = None
     try:
-        if args.command == "index":
-            cmd_index(args)
+        if args.command in ("index", "benchmark"):
+            args.func(args)
             return 0
         store = _open_store(args)
         with_edges = args.command in ("calls", "callers", "deps", "blast", "stats")

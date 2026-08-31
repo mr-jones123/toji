@@ -55,14 +55,42 @@ A full 12k-file monorepo indexes in ~40s; unchanged reindex scans are sub-second
 | `deps <file>` | import edges both directions, resolved to files |
 | `read <sym>` | the symbol's live source lines from disk |
 | `stats` | index size, resolution quality metrics |
+| `benchmark graphcode <JSONL> <REPOS>` | GraphCode-Bench F1 and exact match |
+| `benchmark traceeval <CORPUS>` | TraceEval edge precision, recall, and F1 |
 
 Every command accepts `--json` for stable machine-readable output.
 
+## Benchmarks
+
+The adapters run Toji directly against local benchmark data; they never clone
+repositories or choose revisions for you.
+
+```bash
+# GraphCode-Bench: REPOS contains owner__repo, owner/repo, or repo directories.
+toji benchmark graphcode bench500_balanced.jsonl repos/ --output graphcode-results.json
+
+# TraceEval: use the held-out IDs and emit files accepted by its official scorer.
+toji benchmark traceeval data/benchmark \
+  --ids data/traceeval_split/test_ids.json \
+  --output-dir traceeval-results/
+python scripts/compute_metrics.py \
+  --results-dir traceeval-results/ --gt-dir data/benchmark \
+  --models toji --languages python javascript
+```
+
+TraceEval Java programs are skipped because Toji indexes Python, TypeScript,
+TSX, and JavaScript only. The adapter's direct TraceEval summary is raw edge
+F1; use the benchmark's `compute_metrics.py` command above for its canonical
+normalization.
+
 ## How resolution works
 
-Call edges store the callee *as written* (`obj.method`, `helper`). At query
-time they resolve through file-local scopes, the importing file's own imports,
-then global unique suffix/bare-name matches:
+Call edges normally store the callee as written (`obj.method`, `helper`). For
+JavaScript and TypeScript, simple constructor assignments (`const obj = new
+Service()`), constructed class fields, and `this.method()` calls are qualified
+to their class before resolution. Remaining calls resolve through file-local
+scopes, the importing file's own imports, then global unique suffix/bare-name
+matches:
 
 - **Confident** matches resolve with the exact call-site line attached.
 - **Ambiguous** names list every candidate instead of guessing.

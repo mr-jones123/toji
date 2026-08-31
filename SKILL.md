@@ -57,6 +57,8 @@ If the command is missing, run one of the above (or build from source with
    | `toji deps <file>` | import edges both directions, resolved to files |
    | `toji read <sym>` | the symbol's actual source lines from disk (def line highlighted) |
    | `toji stats` | index size + unresolved-call count |
+   | `toji benchmark graphcode <JSONL> <REPOS>` | GraphCode-Bench caller/callee F1 and exact match |
+   | `toji benchmark traceeval <CORPUS>` | TraceEval call-edge precision, recall, and F1 |
 
 4. **Read only what matters.** `toji read <sym> [--context N]` prints the exact
    line range; that is the source of truth for behavior claims.
@@ -90,9 +92,10 @@ If the command is missing, run one of the above (or build from source with
 
 ## Model limitations (state them, don't hide them)
 
-- Call resolution is name-based, not type-aware. Dynamic dispatch, factories,
-  and same-named symbols in different modules are handled conservatively:
-  unresolved or ambiguous, never guessed.
+- Call resolution is mostly name-based. TS/JS tracks simple `new Class()`
+  assignments, constructed class fields, and `this.method()` calls; dynamic
+  dispatch, factories, and same-named symbols in different modules remain
+  conservative: unresolved or ambiguous, never guessed.
 - TS/JS docstrings are not captured (Python only).
 - `import * as X` (TS namespace imports) and star re-exports resolve as
   module edges, not per-symbol edges.

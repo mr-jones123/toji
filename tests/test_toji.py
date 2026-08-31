@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -234,6 +235,44 @@ def test_aliased_import_no_duplicate_edge():
     assert imports == ["a.b"]
 
 
+def test_js_receiver_type_resolution(tmp_path: Path):
+    source = """
+class Service {
+  execute() {}
+}
+class OtherService {
+  execute() {}
+}
+class Worker {
+  constructor() { this.service = new Service(); }
+  run() { this.finish(); this.service.execute(); }
+  finish() {}
+}
+class Other {
+  run() { this.finish(); }
+  finish() {}
+}
+function main() {
+  const worker = new Worker();
+  worker.run();
+}
+"""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "main.js").write_text(source)
+    db = tmp_path / "graph.db"
+    index_repo(repo, db)
+    graph = open_graph(db)
+
+    calls, unresolved = graph.calls_of("main")
+    assert {hit.qualname for hit in calls} == {"Worker.run"}
+    assert unresolved == []
+
+    calls, unresolved = graph.calls_of("Worker.run")
+    assert {hit.qualname for hit in calls} == {"Worker.finish", "Service.execute"}
+    assert unresolved == []
+
+
 # ---------------------------------------------------------------------------
 # CLI surface
 # ---------------------------------------------------------------------------
@@ -312,3 +351,81 @@ def test_stats(repo: Path, tmp_path: Path, capsys):
     assert rc == 0
     assert "files" in out and str(N_FILES) in out
     assert "python" in out and "typescript" in out
+
+
+def test_graphcode_benchmark_adapter(repo: Path, tmp_path: Path, capsys):
+    repos = tmp_path / "repos"
+    checkout = repos / "acme__demo"
+    shutil.copytree(repo, checkout)
+    (checkout / "dupe.py").write_text(
+        "def first():\n    pass\n\ndef second():\n    pass\n\n"
+        "class A:\n    def run(self):\n        return first()\n\n"
+        "class B:\n    def run(self):\n        return second()\n"
+    )
+    dataset = tmp_path / "graphcode.jsonl"
+    dataset.write_text(
+        json.dumps(
+            {
+                "sample_id": "demo-run-downstream",
+                "repo": "acme/demo",
+                "question_type": "downstream",
+                "hop_depth": 1,
+                "gold": {"calls": ["second"]},
+                "metadata": {
+                    "anchor": "run",
+                    "anchor_file": "/tmp/demo/dupe.py",
+                    "anchor_source": "    def run(self):\n        return second()",
+                },
+            }
+        )
+        + "\n"
+    )
+
+    rc, out = run_cli(["benchmark", "graphcode", str(dataset), str(repos), "--json"], capsys)
+    assert rc == 0
+    report = json.loads(out)
+    assert report["scored"] == 1
+    assert report["metrics"]["f1"] == 1.0
+    assert report["metrics"]["exact_match"] == 1.0
+
+
+def test_traceeval_benchmark_adapter(tmp_path: Path, capsys):
+    program = tmp_path / "benchmark" / "python" / "demo_0001"
+    program.mkdir(parents=True)
+    (program / "main.py").write_text("def helper():\n    pass\n\ndef run():\n    helper()\n\nrun()\n")
+    (program / "callgraph.json").write_text(
+        json.dumps({"main": ["main.run"], "main.run": ["main.helper"], "main.helper": []})
+    )
+    java_program = tmp_path / "benchmark" / "java" / "java_0001"
+    java_program.mkdir(parents=True)
+    (java_program / "Main.java").write_text("class Main {}\n")
+    (java_program / "callgraph.json").write_text("{}\n")
+    ids = tmp_path / "test_ids.json"
+    ids.write_text(json.dumps({"python": ["demo_0001"], "javascript": [], "java": ["java_0001"]}))
+    output_dir = tmp_path / "results"
+
+    rc, out = run_cli(
+        [
+            "benchmark",
+            "traceeval",
+            str(tmp_path / "benchmark"),
+            "--workers",
+            "1",
+            "--ids",
+            str(ids),
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        ],
+        capsys,
+    )
+    assert rc == 0
+    report = json.loads(out)
+    assert report["scored"] == 1
+    assert report["metrics"]["f1"] == 1.0
+    assert report["unsupported"] == 1
+    payload = json.loads((output_dir / "toji_python_t0.0_r0.json").read_text())
+    assert payload["results"]["demo_0001"]["prediction"] == {
+        "main": ["main.run"],
+        "main.run": ["main.helper"],
+    }

@@ -379,6 +379,92 @@ def _extract_tsjs(lang: str, src: bytes, file_id: int, relpath: str) -> tuple[li
     symbols.insert(0, module)
     by_node[root.id] = module
 
+    # Lexical receiver types from constructor assignments. The type is folded
+    # into the written callee so the existing strict resolver can stay simple.
+    receiver_types: dict[int, dict[str, list[tuple[int, str]]]] = {}
+
+    def scope_id(node: Node) -> int:
+        cur = node.parent
+        while cur is not None and cur.type != "program":
+            if cur.id in by_node:
+                return cur.id
+            cur = cur.parent
+        return root.id
+
+    def class_scope_id(node: Node) -> int:
+        cur = node.parent
+        while cur is not None:
+            if cur.type in ("class_declaration", "abstract_class_declaration"):
+                return cur.id
+            cur = cur.parent
+        return scope_id(node)
+
+    def new_type(node: Node | None) -> str:
+        if node is None or node.type != "new_expression":
+            return ""
+        return _text(node.child_by_field_name("constructor"))
+
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        name_node = value_node = None
+        if node.type == "variable_declarator":
+            name_node = node.child_by_field_name("name")
+            value_node = node.child_by_field_name("value")
+        elif node.type == "assignment_expression":
+            name_node = node.child_by_field_name("left")
+            value_node = node.child_by_field_name("right")
+        elif node.type in ("field_definition", "public_field_definition"):
+            name_node = node.child_by_field_name("property") or node.child_by_field_name("name")
+            value_node = node.child_by_field_name("value")
+
+        receiver_type = new_type(value_node)
+        receiver_name = ""
+        receiver_scope = scope_id(node)
+        if name_node is not None and name_node.type == "identifier":
+            receiver_name = _text(name_node)
+        elif name_node is not None and name_node.type in ("property_identifier", "private_property_identifier"):
+            receiver_name = f"this.{_text(name_node)}"
+            receiver_scope = class_scope_id(node)
+        elif name_node is not None and name_node.type == "member_expression":
+            obj = name_node.child_by_field_name("object")
+            if obj is not None and obj.type == "this":
+                receiver_name = _text(name_node)
+                receiver_scope = class_scope_id(node)
+        if receiver_name and receiver_type:
+            receiver_types.setdefault(receiver_scope, {}).setdefault(receiver_name, []).append(
+                (node.start_byte, receiver_type)
+            )
+        stack.extend(node.named_children)
+
+    def callee_name(callee: Node, call_node: Node, owner: Symbol) -> str:
+        if callee.type != "member_expression":
+            return _text(callee)
+        receiver = callee.child_by_field_name("object")
+        property_node = callee.child_by_field_name("property")
+        if receiver is None or property_node is None:
+            return _text(callee)
+        method = _text(property_node)
+        if receiver.type == "this" and owner.kind == "method" and "." in owner.qualname:
+            return f"{owner.qualname.rsplit('.', 1)[0]}.{method}"
+
+        receiver_scope = scope_id(call_node)
+        receiver_name = ""
+        if receiver.type == "identifier":
+            receiver_name = _text(receiver)
+        elif receiver.type == "member_expression":
+            obj = receiver.child_by_field_name("object")
+            if obj is not None and obj.type == "this":
+                receiver_name = _text(receiver)
+                receiver_scope = class_scope_id(call_node)
+        if receiver_name:
+            assignments = receiver_types.get(receiver_scope, {}).get(receiver_name, [])
+            prior = [item for item in assignments if item[0] < call_node.start_byte]
+            if prior:
+                return f"{max(prior)[1]}.{method}"
+        receiver_type = new_type(receiver)
+        return f"{receiver_type}.{method}" if receiver_type else _text(callee)
+
     # contains: class -> methods
     for sym in symbols:
         if sym.kind != "class":
@@ -416,10 +502,10 @@ def _extract_tsjs(lang: str, src: bytes, file_id: int, relpath: str) -> tuple[li
                 owner = by_node[cur.id]
                 break
             cur = cur.parent
-        if owner is None:
-            edges.append(Edge(src_sym=id(module), kind=EDGE_CALLS, dst_name=_text(caps["callee"][0]), line=call_node.start_point.row + 1))
-        else:
-            edges.append(Edge(src_sym=id(owner), kind=EDGE_CALLS, dst_name=_text(caps["callee"][0]), line=call_node.start_point.row + 1))
+        target = callee_name(caps["callee"][0], call_node, owner or module)
+        edges.append(
+            Edge(src_sym=id(owner or module), kind=EDGE_CALLS, dst_name=target, line=call_node.start_point.row + 1)
+        )
 
     return _finalize(symbols, edges)
 
